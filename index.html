@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pencarian Data Sanxing (Offline + PDF Lokal)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <style>
+      body {
+        background: linear-gradient(to bottom, #e0f2ff, #bcdcff);
+      }
+      .card {
+        background-color: white;
+        border-top: 4px solid #fbbf24;
+        border-radius: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      }
+      .btn {
+        transition: all 0.3s ease;
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+      }
+      th {
+        background-color: #1e3a8a;
+        color: white;
+        padding: 10px;
+        text-align: left;
+      }
+      td {
+        padding: 8px;
+      }
+    </style>
+  </head>
+
+  <body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <!-- Pencarian -->
+    <div id="search-card" class="card w-full max-w-md p-6">
+      <h1 class="text-3xl font-bold text-blue-800 text-center mb-6">
+        🔍 Pencarian Data Sanxing
+      </h1>
+      <input
+        type="text"
+        id="search-input"
+        placeholder="Masukkan kata kunci..."
+        class="w-full border border-blue-300 rounded-lg p-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button
+        id="search-button"
+        class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg"
+      >
+        Cari
+      </button>
+    </div>
+
+    <!-- Hasil -->
+    <div id="result-container" class="hidden flex flex-col items-center w-full">
+      <div
+        id="result-box"
+        class="bg-white shadow-2xl rounded-2xl p-4 w-[95%] h-[70vh] overflow-auto border-t-4 border-yellow-500 mt-4"
+      ></div>
+
+      <div class="flex gap-3 mt-4">
+        <button
+          id="back-button"
+          class="btn bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
+        >
+          Kembali
+        </button>
+        <button
+          id="pdf-button"
+          class="btn bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-lg"
+        >
+          Lihat PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Viewer PDF -->
+    <div
+      id="pdf-viewer"
+      class="hidden w-[95%] h-[80vh] mt-6 bg-white border border-yellow-500 shadow-lg rounded-2xl overflow-hidden"
+    >
+      <iframe id="pdf-frame" src="" class="w-full h-full border-none"></iframe>
+    </div>
+
+    <script>
+      let data = [];
+      let selectedIdpel = null;
+
+      const csvURL =
+        "https://raw.githubusercontent.com/telwbo/gantimeterwbo/refs/heads/main/vkrn_sanxing.csv";
+
+      const searchButton = document.getElementById("search-button");
+      const searchInput = document.getElementById("search-input");
+      const searchCard = document.getElementById("search-card");
+      const resultContainer = document.getElementById("result-container");
+      const resultBox = document.getElementById("result-box");
+      const backButton = document.getElementById("back-button");
+      const pdfButton = document.getElementById("pdf-button");
+      const pdfViewer = document.getElementById("pdf-viewer");
+      const pdfFrame = document.getElementById("pdf-frame");
+
+      // === Baca CSV (pakai delimiter ;) ===
+      window.addEventListener("DOMContentLoaded", () => {
+        fetch(csvURL)
+          .then((res) => res.text())
+          .then((text) => {
+            const parsed = Papa.parse(text, { header: true, delimiter: ";" });
+            data = parsed.data;
+          });
+      });
+
+      // === Tombol Cari ===
+      searchButton.addEventListener("click", () => {
+        const query = searchInput.value.trim().toLowerCase();
+        if (!query) return;
+
+        const results = data.filter((row) =>
+          Object.values(row).some((val) =>
+            val?.toString().toLowerCase().includes(query)
+          )
+        );
+
+        searchCard.classList.add("hidden");
+        resultContainer.classList.remove("hidden");
+        resultBox.innerHTML = "";
+
+        if (results.length === 0) {
+          resultBox.innerHTML = `<p class="text-center text-gray-500 mt-20 text-lg">Tidak ada hasil ditemukan untuk "<strong>${query}</strong>"</p>`;
+          return;
+        }
+
+        const table = document.createElement("table");
+        table.className =
+          "w-full border border-gray-200 rounded-lg overflow-hidden shadow-sm";
+
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        const thJudul = document.createElement("th");
+        const thIsi = document.createElement("th");
+        thJudul.textContent = "Judul";
+        thIsi.textContent = "Isi";
+        headerRow.appendChild(thJudul);
+        headerRow.appendChild(thIsi);
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        results.forEach((item) => {
+          Object.entries(item).forEach(([judul, isi]) => {
+            if (judul.trim() === "" && isi.trim() === "") return;
+            const tr = document.createElement("tr");
+            tr.className = "border-b hover:bg-blue-50 transition-all";
+            const tdJudul = document.createElement("td");
+            tdJudul.className =
+              "text-blue-900 font-semibold border-r border-gray-200";
+            tdJudul.textContent = judul;
+            const tdIsi = document.createElement("td");
+            tdIsi.className = "text-gray-700";
+            tdIsi.textContent = isi;
+            tr.appendChild(tdJudul);
+            tr.appendChild(tdIsi);
+            tbody.appendChild(tr);
+
+            if (judul.toLowerCase() === "idpel") selectedIdpel = isi;
+          });
+        });
+        table.appendChild(tbody);
+        resultBox.appendChild(table);
+      });
+
+      // === Tombol Kembali ===
+      backButton.addEventListener("click", () => {
+        resultContainer.classList.add("hidden");
+        searchCard.classList.remove("hidden");
+        pdfViewer.classList.add("hidden");
+        searchInput.value = "";
+        resultBox.innerHTML = "";
+      });
+
+      // === Tombol Lihat PDF (lokal) ===
+      pdfButton.addEventListener("click", async () => {
+        if (!selectedIdpel) {
+          alert("IDPEL tidak ditemukan dalam hasil pencarian.");
+          return;
+        }
+
+        alert("Mencari PDF lokal yang berisi teks: " + selectedIdpel);
+
+        let foundPdf = null;
+
+        try {
+          const response = await fetch("pdf_list.json");
+          const pdfFiles = await response.json();
+
+          for (const filename of pdfFiles) {
+            const pdfUrl = `pdf/${filename}`;
+            try {
+              const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+              const numPages = pdf.numPages;
+              let content = "";
+
+              for (let i = 1; i <= numPages; i++) {
+                const page = await pdf.getPage(i);
+                const text = await page.getTextContent();
+                const pageText = text.items.map((t) => t.str).join(" ");
+                content += pageText + "\n";
+              }
+
+              if (
+                content.toLowerCase().includes(selectedIdpel.toLowerCase())
+              ) {
+                foundPdf = pdfUrl;
+                break;
+              }
+            } catch (err) {
+              console.warn("Gagal membaca PDF:", filename, err);
+            }
+          }
+        } catch (err) {
+          alert("Gagal memuat daftar PDF (pdf_list.json).");
+          return;
+        }
+
+        if (foundPdf) {
+          pdfViewer.classList.remove("hidden");
+          pdfFrame.src = foundPdf;
+          pdfFrame.scrollIntoView({ behavior: "smooth" });
+        } else {
+          alert("Tidak ditemukan PDF yang mengandung IDPEL: " + selectedIdpel);
+        }
+      });
+    </script>
+  </body>
+</html>
